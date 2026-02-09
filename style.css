@@ -1,0 +1,24 @@
+.page {
+    display: none;
+}
+
+.page.active {
+    display: block;
+}
+
+body.not-authenticated .role-logged-in {
+    display: none;
+}
+
+body.not-authenticated .role-logged-out {
+    display: block;
+}
+
+/*ADMIN SIDE*/
+.role-admin {
+    display: none;
+}
+
+body.is-admin .role-admin {
+    display: block;
+}
