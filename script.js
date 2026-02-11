@@ -1,3 +1,4 @@
+const STORAGE_KEY = "ipt_demo_v1";
 let currentUser = null;
 
 function navigateTo(hash) {
@@ -73,6 +74,8 @@ document.getElementById("registerForm").addEventListener('submit', function(e){
     }
 
     window.db.accounts.push(newUser);
+    saveToStorage();
+
     window.unverifiedEmail = newUser.email;
     this.reset();
     navigateTo('#/verify-email');
@@ -84,6 +87,7 @@ document.getElementById("verifyBtn").addEventListener('click', function(){
     );
     if (user) {
         user.verified = true;
+        saveToStorage();
         window.unverifiedEmail = null;
         navigateTo('#/login');
     }
@@ -92,3 +96,43 @@ document.getElementById("verifyBtn").addEventListener('click', function(){
         navigateTo('#/login');
     });
 });
+
+function loadFromStorage(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw){
+        window.db = {
+            accounts: [
+            {
+                firstname: "Admin",
+                lastname: "User",
+                email: "admin@example.com",
+                password: "Password123!",
+                role: "admin",
+                verified: true
+            }
+        ],
+        departments:[
+            {id: 1, name: "HR"},
+            {id: 2, name: "Engineering"},
+            {id: 3, name: "Sales"}
+        ],
+        employees:[],
+        requests:[]
+        };
+        saveToStorage();
+        return;
+    }
+
+    try {
+        window.db = JSON.parse(raw);
+    } catch (e) {
+        localStorage.removeItem(STORAGE_KEY);
+        loadFromStorage();
+    }
+}
+
+function saveToStorage(){
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(window.db));
+}
+
+loadFromStorage();
