@@ -1,24 +1,76 @@
+/* ===== Page Visibility ===== */
 .page {
     display: none;
 }
-
 .page.active {
     display: block;
 }
 
+/* ===== Authentication State ===== */
 body.not-authenticated .role-logged-in {
-    display: none;
+    display: none !important;
+}
+body.authenticated .role-logged-out {
+    display: none !important;
 }
 
-body.not-authenticated .role-logged-out {
-    display: block;
-}
-
-/*ADMIN SIDE*/
+/* ===== Admin Role ===== */
 .role-admin {
-    display: none;
+    display: none !important;
+}
+body.is-admin .role-admin {
+    display: block !important;
+}
+/* For admin nav items inside dropdowns (li elements) */
+body.is-admin li.role-admin {
+    display: list-item !important;
 }
 
-body.is-admin .role-admin {
-    display: block;
+/* ===== General Styling ===== */
+main {
+    padding-bottom: 40px;
+}
+
+.card {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* ===== Toast Tweaks ===== */
+.toast {
+    min-width: 250px;
+}
+
+/* ===== Request Item Row ===== */
+.request-item-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.request-item-row input[type="text"] {
+    flex: 2;
+}
+.request-item-row input[type="number"] {
+    flex: 0 0 70px;
+}
+.request-item-row .btn {
+    flex: 0 0 auto;
+}
+
+/* ===== Status Badges ===== */
+.badge-status-Pending {
+    background-color: #ffc107;
+    color: #000;
+}
+.badge-status-Approved {
+    background-color: #198754;
+}
+.badge-status-Rejected {
+    background-color: #dc3545;
+}
+
+/* ===== Table actions ===== */
+.table .btn {
+    margin-right: 4px;
+    margin-bottom: 2px;
 }
