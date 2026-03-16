@@ -44,6 +44,49 @@ function saveToStorage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(window.db));
 }
 
+async function login(username, password) {
+    const response = await fetch('http://localhost:3000/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+
+    let data = {};
+    try {
+        data = await response.json();
+    } catch (e) {
+        data = {};
+    }
+
+    if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+    }
+
+    sessionStorage.setItem('authToken', data.token);
+    setAuthState(true, data.user);
+    showToast('Welcome back, ' + data.user.username + '!', 'success');
+    navigateTo('#/profile');
+}
+
+//Add auth header to protect requests
+function getAuthHeaders() {
+    const token = sessionStorage.getItem('authToken');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+//Example: fetch admin data
+async function loadAdminDashboard(){
+    const res = await fetch('http://localhost:3000/api/admin/dashboard',{
+        headers: getAuthHeaders()
+    });
+    if (res.ok){
+        const data = await res.json();
+        document.getElementById('content').innerText = data.message;
+    } else {
+        document.getElementById('content').innerText = 'Access denied!';
+    }
+}
+
 // ======================== TOAST ========================
 
 function showToast(message, type) {
@@ -74,17 +117,60 @@ function setAuthState(isAuth, user) {
     if (isAuth && currentUser) {
         body.classList.remove('not-authenticated');
         body.classList.add('authenticated');
-        document.getElementById('navUsername').textContent = currentUser.firstname || currentUser.email;
-        if (currentUser.role === 'Admin') {
-            body.classList.add('is-admin');
-        } else {
-            body.classList.remove('is-admin');
-        }
+        document.getElementById('navUsername').textContent = currentUser.firstname || currentUser.username || currentUser.email || 'User';
+        body.classList.toggle('is-admin', isAdmin(currentUser));
     } else {
         body.classList.remove('authenticated', 'is-admin');
         body.classList.add('not-authenticated');
         document.getElementById('navUsername').textContent = 'User';
     }
+}
+
+function isAdmin(user) {
+    return user && String(user.role || '').toLowerCase() === 'admin';
+}
+
+function parseJwt(token) {
+    try {
+        const payload = token.split('.')[1];
+        if (!payload) return null;
+        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(
+            atob(base64)
+                .split('')
+                .map(function (c) { return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); })
+                .join('')
+        );
+        return JSON.parse(json);
+    } catch (e) {
+        return null;
+    }
+}
+
+async function restoreSessionFromToken() {
+    const token = sessionStorage.getItem('authToken');
+    if (!token) return;
+
+    const payload = parseJwt(token);
+    if (payload && payload.role) {
+        setAuthState(true, payload);
+        return;
+    }
+
+    try {
+        const res = await fetch('http://localhost:3000/api/profile', {
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setAuthState(true, data.user || data);
+            return;
+        }
+    } catch (e) {
+    }
+
+    sessionStorage.removeItem('authToken');
+    setAuthState(false);
 }
 
 // ======================== NAVIGATION / ROUTING ========================
@@ -108,7 +194,7 @@ function handleRouting() {
         return;
     }
     // Admin guard
-    if (currentUser && currentUser.role !== 'Admin' && adminRoutes.indexOf(hash) !== -1) {
+    if (currentUser && !isAdmin(currentUser) && adminRoutes.indexOf(hash) !== -1) {
         showToast('Access denied – Admin only.', 'danger');
         navigateTo('#/profile');
         return;
@@ -161,19 +247,10 @@ window.addEventListener('hashchange', handleRouting);
 
 // ======================== INIT ========================
 
-window.addEventListener('DOMContentLoaded', function () {
+window.addEventListener('DOMContentLoaded', async function () {
     loadFromStorage();
 
-    // Restore session from localStorage auth_token
-    var savedToken = localStorage.getItem('auth_token');
-    if (savedToken) {
-        var user = window.db.accounts.find(function (a) { return a.email === savedToken; });
-        if (user) {
-            setAuthState(true, user);
-        } else {
-            localStorage.removeItem('auth_token');
-        }
-    }
+    await restoreSessionFromToken();
 
     if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
         window.location.hash = '#/';
@@ -183,7 +260,7 @@ window.addEventListener('DOMContentLoaded', function () {
     // ──────────────── EVENT LISTENERS ────────────────
 
     // --- Register ---
-    document.getElementById('registerForm').addEventListener('submit', function (e) {
+    document.getElementById('registerForm').addEventListener('submit', async function (e) {
         e.preventDefault();
         var firstName = document.getElementById('regFirstName').value.trim();
         var lastName = document.getElementById('regLastName').value.trim();
@@ -198,26 +275,33 @@ window.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        var exists = window.db.accounts.some(function (a) { return a.email === email; });
-        if (exists) {
-            errEl.textContent = 'Email already exists.';
-            return;
+        try {
+            const response = await fetch('http://localhost:3000/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: email, password })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                errEl.textContent = data.error || 'Registration failed.';
+                return;
+            }
+
+            window.db.accounts.push({
+                firstname: firstName,
+                lastname: lastName,
+                email: email,
+                password: '',
+                role: 'User',
+                verified: true
+            });
+            saveToStorage();
+            this.reset();
+            showToast('Account created! You may now log in.', 'success');
+            navigateTo('#/login');
+        } catch (err) {
+            errEl.textContent = 'Network error. Make sure backend is running.';
         }
-
-        window.db.accounts.push({
-            firstname: firstName,
-            lastname: lastName,
-            email: email,
-            password: password,
-            role: 'User',
-            verified: false
-        });
-        saveToStorage();
-
-        localStorage.setItem('unverified_email', email);
-        this.reset();
-        showToast('Account created! Please verify your email.', 'success');
-        navigateTo('#/verify-email');
     });
 
     // --- Verify Email ---
@@ -242,31 +326,24 @@ window.addEventListener('DOMContentLoaded', function () {
     // --- Login ---
     document.getElementById('loginForm').addEventListener('submit', function (e) {
         e.preventDefault();
-        var email = document.getElementById('loginEmail').value.trim();
+        var username = document.getElementById('loginEmail').value.trim();
         var password = document.getElementById('loginPassword').value;
         var errEl = document.getElementById('loginError');
         errEl.textContent = '';
 
-        var user = window.db.accounts.find(function (a) {
-            return a.email === email && a.password === password && a.verified === true;
-        });
-
-        if (!user) {
-            errEl.textContent = 'Invalid credentials or email not verified.';
-            return;
-        }
-
-        localStorage.setItem('auth_token', user.email);
-        setAuthState(true, user);
-        this.reset();
-        showToast('Welcome back, ' + user.firstname + '!', 'success');
-        navigateTo('#/profile');
+        login(username, password)
+            .then(function () {
+                document.getElementById('loginForm').reset();
+            })
+            .catch(function (err) {
+                errEl.textContent = err && err.message ? err.message : 'Login failed. Check credentials and backend server.';
+            });
     });
 
     // --- Logout ---
     document.getElementById('logoutBtn').addEventListener('click', function (e) {
         e.preventDefault();
-        localStorage.removeItem('auth_token');
+        sessionStorage.removeItem('authToken');
         setAuthState(false);
         showToast('Logged out.', 'success');
         navigateTo('#/');
@@ -324,9 +401,10 @@ window.addEventListener('DOMContentLoaded', function () {
 
 function renderProfile() {
     if (!currentUser) return;
-    document.getElementById('profileName').textContent = currentUser.firstname + ' ' + currentUser.lastname;
-    document.getElementById('profileEmail').textContent = currentUser.email;
-    document.getElementById('profileRole').textContent = currentUser.role;
+    var fullName = (currentUser.firstname || currentUser.username || 'User') + (currentUser.lastname ? ' ' + currentUser.lastname : '');
+    document.getElementById('profileName').textContent = fullName;
+    document.getElementById('profileEmail').textContent = currentUser.email || currentUser.username || '';
+    document.getElementById('profileRole').textContent = currentUser.role || '';
 }
 
 // ======================== ACCOUNTS (Admin CRUD) ========================
